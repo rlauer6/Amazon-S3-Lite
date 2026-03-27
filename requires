@@ -1,0 +1,8 @@
+AWS::Signature4   1.02
+HTTP::Request     7.00
+HTTP::Tiny        0.088
+URI::Escape       5.34
+XML::LibXML       2.0210
+IO::Socket::SSL
+Net::SSLeay
+

@@ -1,0 +1,19 @@
+Fri Mar 27 14:37:28 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.0]:
+	* .gitignore: new
+	* ChangeLog: new
+	* Makefile: new
+	* README.md: new
+	* VERSION: new
+	* buildspec.yml: new
+	* docker-compose.yml: new
+	* lib/Amazon/S3/Lite.pm.in: new
+	* lib/Amazon/S3/Lite/Credentials.pm.in: new
+	* lib/Amazon/S3/Lite/Logger.pm.in: new
+	* release-notes.mk: new
+	* requires: new
+	* t/01-s3-lite.t: new
+	* test-requires: new
+	* version.mk: new
+
