@@ -1,3 +1,40 @@
+Wed Apr 29 15:20:06 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.1]:
+	* release-notes-1.0.1.md: new
+	* README.md: generated
+	* VERSION: bump
+	* .gitignore: CPAN::Maker::Bootstrapper build refactor
+	* Makefile: likewise
+	* docker-compose.yml: +logs
+	* lib/Amazon/S3/Lite.pm.in
+	- pod updates
+	(_init_logger)
+	- don't rain on someone's logger
+	(_init_credentials)
+	- awkward attempt reconcile Amazon::Credentials methods
+	(_signer): ditto
+	(_request): add x-amz-content-sha256 header
+	* lib/Amazon/S3/Lite/Credentials.pm.in
+	(session_token): alias for token()
+	* requires
+	- +IO::Socket::SSL, Net::SSLeay
+	* test-requires
+	+ JSON:PP, -Test::More
+	* test-requires.skip: new
+
+	[1.0.1]: CPAN::Maker::Bootstrapper build refactor
+	* .includes/git.mk: new
+	* .includes/help.mk: new
+	* .includes/perl.mk: new
+	* .includes/release-notes.mk: new
+	* .includes/update.mk: new
+	* .includes/upgrade.mk: new
+	* .includes/version.mk: new
+	* cpanfile: new
+	* t/00-amazon-s3-lite.t: new
+
+
 Fri Mar 27 14:37:28 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.0.0]:

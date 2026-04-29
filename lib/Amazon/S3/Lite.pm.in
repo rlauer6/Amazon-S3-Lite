@@ -9,7 +9,9 @@ use AWS::Signature4;
 use Amazon::S3::Lite::Credentials;
 use Amazon::S3::Lite::Logger;
 use Carp qw(croak carp);
+use Data::Dumper;
 use Digest::MD5 qw(md5_base64 md5);
+use Digest::SHA qw(sha256_hex);
 use HTTP::Request;
 use HTTP::Tiny;
 use MIME::Base64 qw(encode_base64);
@@ -63,9 +65,10 @@ sub _init_logger {
     return;
   }
 
-  # Try Log::Log4perl
   if ( eval { require Log::Log4perl; 1 } ) {
-    Log::Log4perl->easy_init($Log::Log4perl::WARN);
+    if ( !Log::Log4perl->initialized ) {
+      Log::Log4perl->easy_init($Log::Log4perl::WARN);
+    }
     $self->{logger} = Log::Log4perl->get_logger(__PACKAGE__);
     return;
   }
@@ -87,12 +90,18 @@ sub _init_credentials {
 
   # 1. Caller-supplied credentials object (duck-typed)
   if ( my $creds = $args->{credentials} ) {
-    croak 'credentials object must implement aws_access_key_id'
-      if !$creds->can('aws_access_key_id');
-    croak 'credentials object must implement aws_secret_access_key'
-      if !$creds->can('aws_secret_access_key');
+    croak "credential object is not blessed.\n"
+      if !blessed $creds;
+
+    foreach (qw(aws_access_key_id aws_secret_access_key token)) {
+      my $sub = $creds->can($_) // $creds->can("get_$_");
+
+      croak "credentials object must implement $_ or get_$_\n"
+        if !$sub;
+    }
 
     $self->{credentials} = $creds;
+
     return;
   }
 
@@ -165,8 +174,8 @@ sub _signer {
   my $creds = $self->credentials;
 
   return AWS::Signature4->new(
-    -access_key => $creds->aws_access_key_id,
-    -secret_key => $creds->aws_secret_access_key,
+    -access_key => $creds->get_aws_access_key_id     // $creds->aws_access_key_id,
+    -secret_key => $creds->get_aws_secret_access_key // $creds->get_aws_secret_access_key,
   );
 }
 
@@ -230,10 +239,17 @@ sub _request {
     $req->header( $name => $headers->{$name} );
   }
 
-  # Add session token header before signing if present
-  my $token = $self->credentials->token;
+  my $token_sub = $self->credentials->can('get_token') // $self->credentials->can('token');
+  my $token     = $token_sub ? $token_sub->( $self->credentials ) : undef;
+
   if ( defined $token && length $token ) {
     $req->header( 'x-amz-security-token' => $token );
+  }
+
+  # add before $signer->sign(...)
+  if ( !$content_is_coderef ) {
+    my $hash = sha256_hex( ref $content eq 'SCALAR' ? ${$content} : $content // q{} );
+    $req->header( 'x-amz-content-sha256' => $hash );
   }
 
   # Sign — mutates $req with Authorization and x-amz-date
@@ -1367,6 +1383,14 @@ is handled transparently - your object's region is not changed.
 B<Cold start:> Because this module depends only on L<HTTP::Tiny> (Perl core),
 L<XML::LibXML>, L<AWS::Signature4>, and L<URI::Escape>, it adds minimal
 overhead to Lambda container image builds compared to LWP-based S3 clients.
+
+=head1 TESTING
+
+When testing against LocalStack, be aware that LocalStack is more lenient
+than real S3 regarding SigV4 requirements. In particular, LocalStack may
+accept requests where the C<x-amz-content-sha256> header is missing or
+where session token handling is incorrect. Tests that pass against LocalStack
+should always be verified against real S3 before release.
 
 =head1 SEE ALSO
 

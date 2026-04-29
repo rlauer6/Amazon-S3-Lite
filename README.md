@@ -1,3 +1,27 @@
+# Table of Contents
+
+* [NAME](#name)
+* [SYNOPSIS](#synopsis)
+* [DESCRIPTION](#description)
+* [CONSTRUCTOR](#constructor)
+  * [new](#new)
+  * [Credential resolution order](#credential-resolution-order)
+* [METHODS](#methods)
+  * [list\_objects\_v2](#list\objects\v2)
+  * [list\_all\_objects\_v2](#list\all\objects\v2)
+  * [get\_object](#get\object)
+  * [head\_object](#head\object)
+  * [put\_object](#put\object)
+  * [copy\_object](#copy\object)
+  * [delete\_object](#delete\object)
+  * [list\_buckets](#list\buckets)
+* [ERROR HANDLING](#error-handling)
+* [DEPENDENCIES](#dependencies)
+* [LAMBDA USAGE NOTES](#lambda-usage-notes)
+* [TESTING](#testing)
+* [SEE ALSO](#see-also)
+* [AUTHOR](#author)
+* [LICENSE](#license)
 # NAME
 
 Amazon::S3::Lite - A lightweight Amazon S3 client for common operations
@@ -472,6 +496,14 @@ is handled transparently - your object's region is not changed.
 **Cold start:** Because this module depends only on [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (Perl core),
 [XML::LibXML](https://metacpan.org/pod/XML%3A%3ALibXML), [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4), and [URI::Escape](https://metacpan.org/pod/URI%3A%3AEscape), it adds minimal
 overhead to Lambda container image builds compared to LWP-based S3 clients.
+
+# TESTING
+
+When testing against LocalStack, be aware that LocalStack is more lenient
+than real S3 regarding SigV4 requirements. In particular, LocalStack may
+accept requests where the `x-amz-content-sha256` header is missing or
+where session token handling is incorrect. Tests that pass against LocalStack
+should always be verified against real S3 before release.
 
 # SEE ALSO
 
