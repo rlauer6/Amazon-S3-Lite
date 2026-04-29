@@ -1,0 +1,23 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+
+REPO="$1"
+
+set -euo pipefail
+set -x
+
+apt-get update && apt-get install -y \
+  git gcc make perl curl ca-certificates
+
+curl -L https://cpanmin.us | perl - App::cpanminus 
+
+git clone $REPO
+WORKDIR=$(basename $REPO .git)
+cd $WORKDIR
+
+for a in $(cat build-requires); do
+    cpanm -n -v $a
+done
+
+make SCAN=off LINT=off
+

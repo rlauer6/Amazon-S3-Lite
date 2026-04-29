@@ -1,0 +1,14 @@
+name: Amazon::S3::Lite
+on:
+  push:
+    branches: [ main, dev ]
+jobs:
+  amazon-s3-lite:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: build
+        run: ./build-github https://github.com/rlauer6/Amazon-S3-Lite.git
