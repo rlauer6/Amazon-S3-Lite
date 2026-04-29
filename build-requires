@@ -5,7 +5,12 @@ YAML::XS
 Text::CSV_XS
 Pod::Markdown
 Role::Tiny
-CPAN::Maker@1.8.2
+CPAN::Maker::Bootstrapper@2.0.0
+CPAN::Maker@1.8.3
+AWS::Signature4@1.02
+IO::Socket::SSL
+Net::SSLeay
+XML::LibXML@2.0210
 Test::Output
 Test::Exit
 File::ShareDir

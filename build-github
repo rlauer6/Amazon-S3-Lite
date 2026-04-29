@@ -7,9 +7,12 @@ set -euo pipefail
 set -x
 
 apt-get update && apt-get install -y \
-  git gcc make perl curl ca-certificates
+  git gcc make perl curl ca-certificates \
+  libxml2-dev libexpat-dev libssl-dev libzip-dev
 
 curl -L https://cpanmin.us | perl - App::cpanminus 
+
+export PERL_CPANM_OPT=-"n -v --mirror https://cpan.openbedrock.net/orepan2 --mirror https://cpan.treasurersbriefcase.com/orepan2 --mirror https://cpan.metacpan.org"
 
 git clone $REPO
 WORKDIR=$(basename $REPO .git)
