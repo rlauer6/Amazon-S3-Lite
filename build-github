@@ -14,6 +14,7 @@ curl -L https://cpanmin.us | perl - App::cpanminus
 git clone $REPO
 WORKDIR=$(basename $REPO .git)
 cd $WORKDIR
+git checkout $GITHUB_REF_NAME
 
 for a in $(cat build-requires); do
     cpanm -n -v $a
