@@ -7,4 +7,4 @@ requires "HTTP::Tiny", "0.088";
 requires "IO::Scalar", "0";
 requires "JSON::PP", "4.16";
 requires "URI::Escape", "5.34";
-requires "XML::LibXML", "2.0210";
+requires "XML::Twig", "0";

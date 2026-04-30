@@ -464,7 +464,7 @@ available.
 
 - [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (core since Perl 5.14)
 - [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4)
-- [XML::LibXML](https://metacpan.org/pod/XML%3A%3ALibXML) (for parsing list and copy responses)
+- [XML::Twig](https://metacpan.org/pod/XML%3A%3ATwig) (for parsing list and copy responses)
 - [Digest::MD5](https://metacpan.org/pod/Digest%3A%3AMD5) (core)
 - [MIME::Base64](https://metacpan.org/pod/MIME%3A%3ABase64) (core)
 - [URI::Escape](https://metacpan.org/pod/URI%3A%3AEscape)
@@ -494,7 +494,7 @@ constructor. This is an S3 requirement, not a limitation of this module, and
 is handled transparently - your object's region is not changed.
 
 **Cold start:** Because this module depends only on [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (Perl core),
-[XML::LibXML](https://metacpan.org/pod/XML%3A%3ALibXML), [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4), and [URI::Escape](https://metacpan.org/pod/URI%3A%3AEscape), it adds minimal
+[XML::TWig](https://metacpan.org/pod/XML%3A%3ATWig), [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4), and [URI::Escape](https://metacpan.org/pod/URI%3A%3AEscape), it adds minimal
 overhead to Lambda container image builds compared to LWP-based S3 clients.
 
 # TESTING

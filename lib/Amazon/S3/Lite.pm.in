@@ -17,7 +17,7 @@ use HTTP::Tiny;
 use MIME::Base64 qw(encode_base64);
 use Scalar::Util qw(blessed openhandle reftype);
 use URI::Escape qw(uri_escape_utf8);
-use XML::LibXML;
+use XML::Twig;
 
 ########################################################################
 sub new {
@@ -173,9 +173,15 @@ sub _signer {
 
   my $creds = $self->credentials;
 
+  my $access_key_id = $creds->can('get_aws_access_key_id') && $creds->get_aws_access_key_id;
+  $access_key_id //= $creds->can('aws_access_key_id') && $creds->aws_access_key_id;
+
+  my $secret_access_key = $creds->can('get_aws_secret_access_key') && $creds->get_aws_secret_access_key;
+  $secret_access_key //= $creds->can('aws_secret_access_key') && $creds->aws_secret_access_key;
+
   return AWS::Signature4->new(
-    -access_key => $creds->get_aws_access_key_id     // $creds->aws_access_key_id,
-    -secret_key => $creds->get_aws_secret_access_key // $creds->get_aws_secret_access_key,
+    -access_key => $access_key_id,
+    -secret_key => $secret_access_key,
   );
 }
 
@@ -474,27 +480,34 @@ sub list_buckets {
 ########################################################################
 # Parse ListAllMyBucketsResult XML
 ########################################################################
+########################################################################
 sub _parse_list_buckets {
 ########################################################################
   my ( $self, $xml ) = @_;
 
-  my $doc  = XML::LibXML->load_xml( string => $xml );
-  my $xpc  = _xpc($doc);
-  my $root = '/s3:ListAllMyBucketsResult';
+  my ( @buckets, $owner_id, $owner_name );
 
-  my @buckets;
-
-  for my $node ( $xpc->findnodes("$root/s3:Buckets/s3:Bucket") ) {
-    push @buckets,
-      {
-      name          => $xpc->findvalue( 's3:Name',         $node ),
-      creation_date => $xpc->findvalue( 's3:CreationDate', $node ),
-      };
-  }
+  XML::Twig->new(
+    twig_handlers => {
+      'Bucket' => sub {
+        my ( $t, $node ) = @_;
+        push @buckets,
+          {
+          name          => $node->first_child_text('Name'),
+          creation_date => $node->first_child_text('CreationDate'),
+          };
+      },
+      'Owner' => sub {
+        my ( $t, $node ) = @_;
+        $owner_id   = $node->first_child_text('ID');
+        $owner_name = $node->first_child_text('DisplayName');
+      },
+    }
+  )->parse($xml);
 
   return {
-    owner_id   => $xpc->findvalue("$root/s3:Owner/s3:ID"),
-    owner_name => $xpc->findvalue("$root/s3:Owner/s3:DisplayName"),
+    owner_id   => $owner_id,
+    owner_name => $owner_name,
     buckets    => \@buckets,
   };
 }
@@ -543,28 +556,26 @@ sub copy_object {
 ########################################################################
 # Parse CopyObjectResult XML, detecting the 200-with-error edge case
 ########################################################################
+########################################################################
 sub _parse_copy_response {
 ########################################################################
   my ( $self, $xml, $context ) = @_;
 
-  my $doc  = XML::LibXML->load_xml( string => $xml );
-  my $root = $doc->documentElement->localname;
+  my $twig = XML::Twig->new->parse($xml);
+  my $root = $twig->root->tag;
 
   if ( $root eq 'Error' ) {
-    my $code = $doc->findvalue('/Error/Code');
-    my $msg  = $doc->findvalue('/Error/Message');
+    my $code = $twig->root->first_child_text('Code');
+    my $msg  = $twig->root->first_child_text('Message');
     croak sprintf '%s failed: %s - %s', $context, $code, $msg;
   }
 
-  my $xpc         = _xpc($doc);
-  my $result_root = '/s3:CopyObjectResult';
-
-  my $etag = $xpc->findvalue("$result_root/s3:ETag");
-  $etag =~ s/\A"|"\z//gxsm if defined $etag;
+  my $etag = $twig->root->first_child_text('ETag') // q{};
+  $etag =~ s/\A"|"\z//gxsm;
 
   return {
     etag          => $etag,
-    last_modified => $xpc->findvalue("$result_root/s3:LastModified"),
+    last_modified => $twig->root->first_child_text('LastModified'),
   };
 }
 
@@ -610,11 +621,14 @@ sub put_object {
     # --- Filehandle path ---
     my $content_length = $options{content_length};
 
+    # Try to stat the handle for real files; suppress warning on
+    # in-memory handles (IO::Scalar etc.) that have no underlying fd
     if ( !defined $content_length ) {
-      # Try to stat the handle for real files; suppress warning on
-      # in-memory handles (IO::Scalar etc.) that have no underlying fd
-      my @st = eval { stat $data };
-      $content_length = $st[7] if @st && defined $st[7];
+      my $fd = eval { fileno($data) };
+      if ( defined $fd && $fd >= 0 ) {
+        my @st = stat $data;
+        $content_length = $st[7] if @st && defined $st[7];
+      }
     }
 
     croak 'content_length is required for in-memory filehandles'
@@ -652,24 +666,6 @@ sub put_object {
   $etag =~ s/\A"|"\z//gxsm if defined $etag;
 
   return $etag;
-}
-
-########################################################################
-# S3 XML namespace — must be registered for all XPath queries
-########################################################################
-use constant S3_NS => 'http://s3.amazonaws.com/doc/2006-03-01/';
-
-########################################################################
-# Build a namespace-aware XPath context for a parsed document
-########################################################################
-sub _xpc {
-########################################################################
-  my ($doc) = @_;
-
-  my $xpc = XML::LibXML::XPathContext->new($doc);
-  $xpc->registerNs( 's3', S3_NS );
-
-  return $xpc;
 }
 
 ########################################################################
@@ -722,48 +718,48 @@ sub list_objects_v2 {
 ########################################################################
 # Parse the XML body of a ListObjectsV2 response
 ########################################################################
+########################################################################
 sub _parse_list_objects_v2 {
 ########################################################################
   my ( $self, $xml ) = @_;
 
-  my $doc  = XML::LibXML->load_xml( string => $xml );
-  my $xpc  = _xpc($doc);
-  my $root = '/s3:ListBucketResult';
+  my ( @objects, @common_prefixes );
+  my ( $bucket, $prefix, $key_count, $max_keys, $is_truncated, $next_token );
 
-  my $is_truncated = $xpc->findvalue("$root/s3:IsTruncated") eq 'true' ? 1 : 0;
-
-  my $next_token
-    = $is_truncated
-    ? $xpc->findvalue("$root/s3:NextContinuationToken")
-    : undef;
-
-  my @objects;
-
-  for my $node ( $xpc->findnodes("$root/s3:Contents") ) {
-    my $etag = $xpc->findvalue( 's3:ETag', $node );
-    $etag =~ s/\A"|"\z//gxsm if defined $etag;  # strip surrounding quotes
-
-    push @objects,
-      {
-      key           => $xpc->findvalue( 's3:Key',          $node ),
-      size          => $xpc->findvalue( 's3:Size',         $node ) + 0,
-      last_modified => $xpc->findvalue( 's3:LastModified', $node ),
-      etag          => $etag,
-      storage_class => $xpc->findvalue( 's3:StorageClass', $node ),
-      };
-  }
-
-  my @common_prefixes;
-
-  for my $node ( $xpc->findnodes("$root/s3:CommonPrefixes") ) {
-    push @common_prefixes, $xpc->findvalue( 's3:Prefix', $node );
-  }
+  XML::Twig->new(
+    twig_handlers => {
+      'Name'                    => sub { $bucket       = $_[1]->text },
+      'ListBucketResult/Prefix' => sub { $prefix       = $_[1]->text },
+      'KeyCount'                => sub { $key_count    = $_[1]->text + 0 },
+      'MaxKeys'                 => sub { $max_keys     = $_[1]->text + 0 },
+      'IsTruncated'             => sub { $is_truncated = $_[1]->text eq 'true' ? 1 : 0 },
+      'NextContinuationToken'   => sub { $next_token   = $_[1]->text },
+      'Contents'                => sub {
+        my ( $t, $node ) = @_;
+        my $etag = $node->first_child_text('ETag') // q{};
+        $etag =~ s/\A"|"\z//gxsm;
+        push @objects,
+          {
+          key           => $node->first_child_text('Key'),
+          size          => $node->first_child_text('Size') + 0,
+          last_modified => $node->first_child_text('LastModified'),
+          etag          => $etag,
+          storage_class => $node->first_child_text('StorageClass'),
+          };
+        $t->purge;  # free memory as we go - important for large listings
+      },
+      'CommonPrefixes' => sub {
+        my ( $t, $node ) = @_;
+        push @common_prefixes, $node->first_child_text('Prefix');
+      },
+    }
+  )->parse($xml);
 
   return {
-    bucket                  => $xpc->findvalue("$root/s3:Name"),
-    prefix                  => $xpc->findvalue("$root/s3:Prefix"),
-    key_count               => $xpc->findvalue("$root/s3:KeyCount") + 0,
-    max_keys                => $xpc->findvalue("$root/s3:MaxKeys") + 0,
+    bucket                  => $bucket,
+    prefix                  => $prefix,
+    key_count               => $key_count,
+    max_keys                => $max_keys,
     is_truncated            => $is_truncated,
     next_continuation_token => $next_token,
     objects                 => \@objects,
@@ -827,13 +823,11 @@ sub _croak_on_error {
 
   # Attempt to extract S3 error message from XML body
   my $detail = q{};
+
   if ( $response->{content} && $response->{content} =~ /<\?xml/xsm ) {
-    eval {
-      my $doc  = XML::LibXML->load_xml( string => $response->{content} );
-      my $msg  = $doc->findvalue('/Error/Message');
-      my $code = $doc->findvalue('/Error/Code');
-      $detail = " - $code: $msg" if $code || $msg;
-    };
+    my ($code) = $response->{content} =~ m{<Code>([^<]+)</Code>}xsm;
+    my ($msg)  = $response->{content} =~ m{<Message>([^<]+)</Message>}xsm;
+    $detail = " - $code: $msg" if $code || $msg;
   }
 
   croak sprintf '%s failed: HTTP %s %s%s', $context, $status, $reason, $detail;
@@ -1340,7 +1334,7 @@ available.
 
 =item * L<AWS::Signature4>
 
-=item * L<XML::LibXML> (for parsing list and copy responses)
+=item * L<XML::Twig> (for parsing list and copy responses)
 
 =item * L<Digest::MD5> (core)
 
@@ -1381,7 +1375,7 @@ constructor. This is an S3 requirement, not a limitation of this module, and
 is handled transparently - your object's region is not changed.
 
 B<Cold start:> Because this module depends only on L<HTTP::Tiny> (Perl core),
-L<XML::LibXML>, L<AWS::Signature4>, and L<URI::Escape>, it adds minimal
+L<XML::Twig>, L<AWS::Signature4>, and L<URI::Escape>, it adds minimal
 overhead to Lambda container image builds compared to LWP-based S3 clients.
 
 =head1 TESTING
