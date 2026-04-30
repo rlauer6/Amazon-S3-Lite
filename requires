@@ -1,7 +1,6 @@
 +IO::Socket::SSL 0
 +Net::SSLeay 0
-AWS::Signature4 1.02
-HTTP::Request 7.00
+Amazon::Signature4::Lite 1.0.0
 HTTP::Tiny 0.088
 URI::Escape 5.34
 XML::Twig 0

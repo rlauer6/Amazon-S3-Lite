@@ -1,3 +1,17 @@
+Thu Apr 30 16:12:47 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.1.0]:
+	* release-notes-1.1.0.md: new
+	* VERSION: bump
+	* README.md: generated
+	* lib/Amazon/S3/Lite.pm.in
+	- pod updates
+	- replace AWS::Signature4 w/Amazon::Signature4::Lite
+	(_signer): refactored to use Amazon::Signature4::Lite
+	(_request): likewise
+	* requires: -HTTP::Request
+	* cpanfile: likewise
+
 Thu Apr 30 10:40:23 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.0.2]:
