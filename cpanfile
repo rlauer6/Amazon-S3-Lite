@@ -1,7 +1,6 @@
 requires "IO::Socket::SSL", "0";
 requires "Net::SSLeay", "0";
-requires "AWS::Signature4", "1.02";
-requires "HTTP::Request", "7.00";
+requires "Amazon::Signature4::Lite", "1.0.0";
 requires "HTTP::Tiny", "0";
 requires "HTTP::Tiny", "0.088";
 requires "IO::Scalar", "0";

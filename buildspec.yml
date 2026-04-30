@@ -3,13 +3,14 @@ project:
   author:
     name: Rob Lauer
     mailto: rlauer@treasurersbriefcase.com
-pm_module: Amazon::S3::Lite
+pm-module: Amazon::S3::Lite
 min-perl-version: 5.010
 dependencies:
   requires: requires
-  test_requires: test-requires
+  test-requires: test-requires
 path:
-  pm_module: lib
+  pm-module: lib
+  exe-files: bin
   tests: t
 extra-files:
   - ChangeLog

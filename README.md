@@ -24,7 +24,8 @@
 * [LICENSE](#license)
 # NAME
 
-Amazon::S3::Lite - A lightweight Amazon S3 client for common operations
+Amazon::S3::Lite - A lightweight Amazon S3 client for common
+operations
 
 # SYNOPSIS
 
@@ -96,30 +97,33 @@ Amazon::S3::Lite - A lightweight Amazon S3 client for common operations
 
 # DESCRIPTION
 
-`Amazon::S3::Lite` is a minimal Amazon S3 client covering the operations
-most commonly needed in AWS Lambda functions and lightweight scripts:
-listing buckets, listing objects, reading, writing, copying, and deleting.
+`Amazon::S3::Lite` is a minimal Amazon S3 client covering the
+operations most commonly needed in AWS Lambda functions and
+lightweight scripts: listing buckets, listing objects, reading,
+writing, copying, and deleting.
 
-It is built on [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (core since Perl 5.14) and [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4),
-with no dependency on LWP or any part of the libwww-perl ecosystem. The
-dependency list is intentionally small, making it well-suited for Lambda
-container images where minimizing cold-start time and image size matters.
+It is built on [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (core since Perl 5.14) and
+[Amazon::Signature4::Lite](https://metacpan.org/pod/Amazon%3A%3ASignature4%3A%3ALite), with no dependency on LWP or any part of
+the libwww-perl ecosystem. The dependency list is intentionally small,
+making it well-suited for Lambda container images where minimizing
+cold-start time and image size matters.
 
 It is not a replacement for [Amazon::S3](https://metacpan.org/pod/Amazon%3A%3AS3) or [Net::Amazon::S3](https://metacpan.org/pod/Net%3A%3AAmazon%3A%3AS3), which
 support the full S3 API surface including multipart upload, bucket
 management, ACLs, versioning, and presigned URLs. If you need those
 features, use one of those distributions instead.
 
-[Amazon::S3::Thin](https://metacpan.org/pod/Amazon%3A%3AS3%3A%3AThin) is another excellent lightweight S3 client with a similar
-philosophy and a longer track record. It is more complete than this module -
-supporting presigned URLs, bulk delete, and virtual-hosted-style requests -
-and returns raw [HTTP::Response](https://metacpan.org/pod/HTTP%3A%3AResponse) objects so callers handle status codes and
-errors themselves. `Amazon::S3::Lite` differs in three ways: it has no
-dependency on LWP (`Amazon::S3::Thin` defaults to [LWP::UserAgent](https://metacpan.org/pod/LWP%3A%3AUserAgent)), it
-returns parsed hashrefs rather than raw response objects, and it has
-first-class support for Lambda IAM role credential rotation. If you need the
-broader feature set or prefer direct HTTP access, `Amazon::S3::Thin` is a
-fine choice.
+[Amazon::S3::Thin](https://metacpan.org/pod/Amazon%3A%3AS3%3A%3AThin) is another excellent lightweight S3 client with a
+similar philosophy and a longer track record. It is more complete than
+this module - supporting presigned URLs, bulk delete, and
+virtual-hosted-style requests - and returns raw [HTTP::Response](https://metacpan.org/pod/HTTP%3A%3AResponse)
+objects so callers handle status codes and errors
+themselves. `Amazon::S3::Lite` differs in three ways: it has no
+dependency on LWP (`Amazon::S3::Thin` defaults to [LWP::UserAgent](https://metacpan.org/pod/LWP%3A%3AUserAgent)),
+it returns parsed hashrefs rather than raw response objects, and it
+has first-class support for Lambda IAM role credential rotation. If
+you need the broader feature set or prefer direct HTTP access,
+`Amazon::S3::Thin` is a fine choice.
 
 # CONSTRUCTOR
 
@@ -153,9 +157,10 @@ Returns a new `Amazon::S3::Lite` object. Options:
         $creds->aws_secret_access_key
         $creds->token            # may return undef
 
-    Any object that satisfies this interface is accepted - [Amazon::Credentials](https://metacpan.org/pod/Amazon%3A%3ACredentials),
-    [Paws::Credential::\*](https://metacpan.org/pod/Paws%3A%3ACredential%3A%3A%2A), or your own. The getters are called at request time,
-    so objects that refresh expiring credentials transparently are supported.
+    Any object that satisfies this interface is accepted -
+    [Amazon::Credentials](https://metacpan.org/pod/Amazon%3A%3ACredentials), [Paws::Credential::\*](https://metacpan.org/pod/Paws%3A%3ACredential%3A%3A%2A), or your own. The
+    getters are called at request time, so objects that refresh expiring
+    credentials transparently are supported.
 
 - logger
 
@@ -168,9 +173,9 @@ Returns a new `Amazon::S3::Lite` object. Options:
         $logger->error(...)
 
     If not supplied, the module looks for [Log::Log4perl](https://metacpan.org/pod/Log%3A%3ALog4perl). If available,
-    it calls `Log::Log4perl::easy_init` with level WARN and logs to STDERR.
-    If Log::Log4perl is not installed, a minimal internal logger is used that
-    prints WARN and above to STDERR.
+    it calls `Log::Log4perl::easy_init` with level WARN and logs to
+    STDERR.  If Log::Log4perl is not installed, a minimal internal logger
+    is used that prints WARN and above to STDERR.
 
 - host
 
@@ -188,14 +193,15 @@ Returns a new `Amazon::S3::Lite` object. Options:
 
 ## Credential resolution order
 
-When no `credentials` object is passed, credentials are resolved in this
-order:
+When no `credentials` object is passed, credentials are resolved in
+this order:
 
 1. Constructor arguments `aws_access_key_id` and `aws_secret_access_key`.
 2. Environment variables `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
 and optionally `AWS_SESSION_TOKEN`.
 3. [Amazon::Credentials](https://metacpan.org/pod/Amazon%3A%3ACredentials), if installed. This covers IAM instance roles,
-Lambda execution roles, ECS task roles, and `~/.aws/credentials` profiles.
+Lambda execution roles, ECS task roles, and `~/.aws/credentials`
+profiles.
 4. If none of the above yield credentials, the constructor croaks.
 
 # METHODS
@@ -227,7 +233,8 @@ Options:
 
 - continuation\_token
 
-    Resume a truncated listing from a prior call's `next_continuation_token`.
+    Resume a truncated listing from a prior call's
+    `next_continuation_token`.
 
 - start\_after
 
@@ -272,17 +279,19 @@ Accepts the same options as `list_objects_v2` except
       printf "%s  %d bytes\n", $obj->{key}, $obj->{size};
     }
 
-Be mindful of memory when listing buckets with large numbers of objects.
-For very large listings, use ["list\_objects\_v2"](#list_objects_v2) directly and process
-each page as it arrives.
+Be mindful of memory when listing buckets with large numbers of
+objects.  For very large listings, use ["list\_objects\_v2"](#list_objects_v2) directly
+and process each page as it arrives.
 
 `delimiter` and `common_prefixes` are not supported by this method.
-The purpose of `list_all_objects_v2` is a complete flat listing of all
-matching keys. Hierarchical directory-style traversal using `delimiter`
-is inherently page-by-page and should use ["list\_objects\_v2"](#list_objects_v2) directly.
+The purpose of `list_all_objects_v2` is a complete flat listing of
+all matching keys. Hierarchical directory-style traversal using
+`delimiter` is inherently page-by-page and should use
+["list\_objects\_v2"](#list_objects_v2) directly.
 
 Returns a (possibly empty) list of object hashrefs, each with the same
-fields as the elements of `objects` in the `list_objects_v2` response.
+fields as the elements of `objects` in the `list_objects_v2`
+response.
 
 ## get\_object
 
@@ -316,8 +325,8 @@ Options:
 
     Path to a local file where the object body should be written. When
     supplied, the response body is streamed directly to disk via
-    HTTP::Tiny's `:content_file` mechanism and `content` is omitted
-    from the returned hashref. The file is created or overwritten.
+    HTTP::Tiny's `:content_file` mechanism and `content` is omitted from
+    the returned hashref. The file is created or overwritten.
 
         my $meta = $s3->get_object('my-bucket', 'data/dump.csv',
           filename => '/tmp/dump.csv',
@@ -332,12 +341,13 @@ Options:
     my $meta = $s3->head_object($bucket, $key);
 
 Fetches metadata for `$key` without retrieving the object body.
-Useful for existence checks and reading `x-amz-meta-*` headers cheaply.
+Useful for existence checks and reading `x-amz-meta-*` headers
+cheaply.
 
 Returns `undef` if the key does not exist (HTTP 404).
 
-Returns a hashref on success with the same fields as `get_object` except
-`content`, which is always absent.
+Returns a hashref on success with the same fields as `get_object`
+except `content`, which is always absent.
 
 ## put\_object
 
@@ -352,7 +362,8 @@ Stores `$data` at `$key` in `$bucket`. `$data` may be:
 When passing a filehandle, `content_length` becomes required unless
 HTTP::Tiny can determine the size from the handle (i.e. the handle is
 backed by a real file). For in-memory handles (`IO::Scalar`, etc.)
-you must supply `content_length` explicitly, or the method will croak.
+you must supply `content_length` explicitly, or the method will
+croak.
 
     # Scalar
     $s3->put_object('my-bucket', 'hello.txt', 'Hello, world!',
@@ -421,7 +432,8 @@ If `version_id` is provided, that specific version is deleted.
 
 Returns true on success. Note that S3 returns HTTP 204 for both
 successful deletes _and_ deletes of non-existent keys, so this method
-does not distinguish between the two - it succeeds silently in either case.
+does not distinguish between the two - it succeeds silently in either
+case.
 
 ## list\_buckets
 
@@ -441,8 +453,9 @@ Returns a hashref:
       ],
     }
 
-Note that this operation is always signed against `us-east-1` regardless
-of the region the object was constructed with. See ["LAMBDA USAGE NOTES"](#lambda-usage-notes).
+Note that this operation is always signed against `us-east-1`
+regardless of the region the object was constructed with. See
+["LAMBDA USAGE NOTES"](#lambda-usage-notes).
 
 # ERROR HANDLING
 
@@ -463,7 +476,7 @@ available.
 # DEPENDENCIES
 
 - [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (core since Perl 5.14)
-- [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4)
+- [Amazon::Signature4::Lite](https://metacpan.org/pod/Amazon%3A%3ASignature4%3A%3ALite)
 - [XML::Twig](https://metacpan.org/pod/XML%3A%3ATwig) (for parsing list and copy responses)
 - [Digest::MD5](https://metacpan.org/pod/Digest%3A%3AMD5) (core)
 - [MIME::Base64](https://metacpan.org/pod/MIME%3A%3ABase64) (core)
@@ -479,52 +492,56 @@ preference to the built-in minimal logger.
 
 # LAMBDA USAGE NOTES
 
-In a Lambda container, credentials come from the execution role via the ECS
-credential provider endpoint (indicated by
+In a Lambda container, credentials come from the execution role via
+the ECS credential provider endpoint (indicated by
 `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` in the environment).
-[Amazon::Credentials](https://metacpan.org/pod/Amazon%3A%3ACredentials) handles this automatically when installed and is the
-recommended approach. If you prefer not to take that dependency, the Lambda
-runtime also populates `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and
-`AWS_SESSION_TOKEN` directly, which this module picks up automatically from
-the environment.
+[Amazon::Credentials](https://metacpan.org/pod/Amazon%3A%3ACredentials) handles this automatically when installed and
+is the recommended approach. If you prefer not to take that
+dependency, the Lambda runtime also populates `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` directly, which
+this module picks up automatically from the environment.
 
-**Region note:** The `list_buckets` method is a global S3 operation and is
-always signed against `us-east-1`, regardless of the region supplied to the
-constructor. This is an S3 requirement, not a limitation of this module, and
-is handled transparently - your object's region is not changed.
+**Region note:** The `list_buckets` method is a global S3 operation
+and is always signed against `us-east-1`, regardless of the region
+supplied to the constructor. This is an S3 requirement, not a
+limitation of this module, and is handled transparently - your
+object's region is not changed.
 
-**Cold start:** Because this module depends only on [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (Perl core),
-[XML::TWig](https://metacpan.org/pod/XML%3A%3ATWig), [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4), and [URI::Escape](https://metacpan.org/pod/URI%3A%3AEscape), it adds minimal
-overhead to Lambda container image builds compared to LWP-based S3 clients.
+**Cold start:** Because this module depends only on [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (Perl
+core), [XML::Twig](https://metacpan.org/pod/XML%3A%3ATwig), [AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4), and [URI::Escape](https://metacpan.org/pod/URI%3A%3AEscape), it adds
+minimal overhead to Lambda container image builds compared to
+LWP-based S3 clients.
 
 # TESTING
 
-When testing against LocalStack, be aware that LocalStack is more lenient
-than real S3 regarding SigV4 requirements. In particular, LocalStack may
-accept requests where the `x-amz-content-sha256` header is missing or
-where session token handling is incorrect. Tests that pass against LocalStack
-should always be verified against real S3 before release.
+When testing against LocalStack, be aware that LocalStack is more
+lenient than real S3 regarding SigV4 requirements. In particular,
+LocalStack may accept requests where the `x-amz-content-sha256`
+header is missing or where session token handling is incorrect. Tests
+that pass against LocalStack should always be verified against real S3
+before release.
 
 # SEE ALSO
 
 [Amazon::S3](https://metacpan.org/pod/Amazon%3A%3AS3) - the full-featured S3 client this module draws from
 
-[Amazon::S3::Thin](https://metacpan.org/pod/Amazon%3A%3AS3%3A%3AThin) - another excellent lightweight S3 client with a similar
-philosophy, broader feature coverage, and a longer track record. Uses LWP by
-default and returns raw [HTTP::Response](https://metacpan.org/pod/HTTP%3A%3AResponse) objects. See ["DESCRIPTION"](#description) for a
-detailed comparison.
+[Amazon::S3::Thin](https://metacpan.org/pod/Amazon%3A%3AS3%3A%3AThin) - another excellent lightweight S3 client with a
+similar philosophy, broader feature coverage, and a longer track
+record. Uses LWP by default and returns raw [HTTP::Response](https://metacpan.org/pod/HTTP%3A%3AResponse)
+objects. See ["DESCRIPTION"](#description) for a detailed comparison.
 
 [Net::Amazon::S3](https://metacpan.org/pod/Net%3A%3AAmazon%3A%3AS3) - a Moose-based full-featured alternative
 
-[AWS::Signature4](https://metacpan.org/pod/AWS%3A%3ASignature4) - the signing module used internally
+[Amazon::Signature4::Lite](https://metacpan.org/pod/Amazon%3A%3ASignature4%3A%3ALite) - the signing module used internally
 
-[Amazon::Credentials](https://metacpan.org/pod/Amazon%3A%3ACredentials) - credential provider with IAM role and profile support
+[Amazon::Credentials](https://metacpan.org/pod/Amazon%3A%3ACredentials) - credential provider with IAM role and profile
+support
 
 # AUTHOR
 
-Rob Lauer <rlauer6@comcast.net>
+Rob Lauer <rlauer@treasurersbriefcase.com>
 
 # LICENSE
 
-This library is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
