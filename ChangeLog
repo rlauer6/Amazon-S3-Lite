@@ -1,3 +1,30 @@
+Thu Apr 30 10:40:23 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.2]:
+	* release-notes-1.0.2.md: new
+	* README.md: generated
+	* build-github
+	- refactored to use cpanfile
+	* .github/workflows/build.yml: remove repo arg
+	* build-requires
+	- need Markdown::Render@1.0.4 to remove use of LWP
+	- need CPAN::Maker@1.8.5 (bugs in 1.8.3/4)
+	* cpanfile
+	- replace XML::LibXML with XML::Twig
+	* requires: likewise
+	* lib/Amazon/S3/Lite.pm.in
+	- pod updates
+	(_signer): use get_aws... or aws... accessors
+	(_parse_list_buckets): replace XML::LibXML with XML::Twig
+	(_parse_copy_response): ditto
+	(_parse_list_objects_v2): ditto
+	(_croak_on_error)
+	- removed XML::LibXML, replaced with regexp
+	(_xpc): removed
+	(put_object): avoid warning from stat on unopened file handle
+	* t/01-s3-lite.t
+	- new unit/integration tests
+
 Wed Apr 29 15:20:06 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.0.1]:

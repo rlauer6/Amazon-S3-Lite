@@ -35,8 +35,7 @@ sub localstack_available {
   return 0 if $res->{status} != 200;
   my $status = JSON::PP->new->decode( $res->{content} );
 
-  return 0 if $status->{services}{s3} ne 'running';
-  return 1;
+  return $status->{services}{s3} =~ /^(?:available|running)$/xsm;
 }
 
 sub new_s3 {
@@ -600,6 +599,48 @@ XML
   }
 };
 
+subtest 'error XML body extracted' => sub {
+  my $s3        = new_s3();
+  my $error_xml = <<'XML';
+<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>AccessDenied</Code>
+  <Message>Access Denied</Message>
+</Error>
+XML
+  no warnings 'redefine';
+  local *Amazon::S3::Lite::_request = mock_request(
+    status  => 403,
+    content => $error_xml,
+  );
+  eval { $s3->list_buckets };
+  like $@, qr/AccessDenied/,  'error Code extracted from XML body';
+  like $@, qr/Access Denied/, 'error Message extracted from XML body';
+};
+
+subtest 'list_objects_v2 with common_prefixes' => sub {
+  my $s3  = new_s3();
+  my $xml = <<'XML';
+<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Name>test-bucket</Name>
+  <Prefix>logs/</Prefix>
+  <KeyCount>0</KeyCount>
+  <MaxKeys>1000</MaxKeys>
+  <IsTruncated>false</IsTruncated>
+  <CommonPrefixes><Prefix>logs/2024/</Prefix></CommonPrefixes>
+  <CommonPrefixes><Prefix>logs/2025/</Prefix></CommonPrefixes>
+</ListBucketResult>
+XML
+
+  no warnings 'redefine';
+  local *Amazon::S3::Lite::_request = mock_request( content => $xml );
+  my $r = $s3->list_objects_v2( 'test-bucket', prefix => 'logs/', delimiter => '/' );
+  is $r->{prefix},                      'logs/',      'root prefix correct';
+  is scalar @{ $r->{common_prefixes} }, 2,            'two common prefixes';
+  is $r->{common_prefixes}[0],          'logs/2024/', 'first common prefix';
+};
+
 ########################################################################
 # Integration tests — require LocalStack
 ########################################################################
@@ -608,6 +649,12 @@ SKIP: {
   skip 'LocalStack not available', 5 unless localstack_available();
 
   my $s3 = new_localstack_s3();
+
+  my $r            = eval { $s3->list_buckets };
+  my @bucket_names = map { $_->{name} } @{ $r->{buckets} // [] };
+
+  skip 'test-bucket not found in LocalStack - create it first', 5
+    if !grep { $_ eq 'test-bucket' } @bucket_names;
 
   # Each subtest is wrapped in eval so one failure doesn't kill the harness
   subtest 'LocalStack - list_buckets' => sub {
@@ -686,6 +733,13 @@ SKIP: {
       max_keys => 2,
     );
     is scalar @{ $page->{objects} }, 2, 'max_keys respected';
+
+    my @all_paginated = $s3->list_all_objects_v2(
+      'test-bucket',
+      prefix   => 'list-test/',
+      max_keys => 2,
+    );
+    ok scalar @all_paginated >= 3, 'list_all_objects_v2 auto-paginates correctly';
 
     # cleanup
     for my $obj (@all) {
