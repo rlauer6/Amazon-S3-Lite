@@ -1,3 +1,26 @@
+Thu May 14 10:00:33 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.1.1]:
+	* release-notes/release-notes-1.1.1.md: new
+	* releaes-notes-*.md => release-notes/
+	* VERSION: bump
+	* cpanfile: likewise
+	* buildspec.yml: remove bin
+	* REQADME.md: generated
+	* lib/Amazon/S3/Lite.pm.in
+	(create_bucket): new
+	(put_bucket_notification_configuration): new
+	(get_bucket_notification_configuration): new
+	(list_buckets): need trailing slash for signing
+	(_croak_on_error): slight refactoring
+	(_resolve): new
+	(_create_notification_configuration): new
+	(_parse_notification_configuration): new
+	(_fetch_templates): new
+	(DATA): added XML templates
+	* t/01-s3-lite.t: updated to test for trailing slash
+	* requires: +List::Util
+
 Thu Apr 30 16:12:47 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.1.0]:

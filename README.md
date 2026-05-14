@@ -15,6 +15,9 @@
   * [copy\_object](#copy\object)
   * [delete\_object](#delete\object)
   * [list\_buckets](#list\buckets)
+  * [create\_bucket](#create\bucket)
+  * [put\_bucket\_notification\_configuration](#put\bucket\notification\configuration)
+  * [get\_bucket\_notification\_configuration](#get\bucket\notification\configuration)
 * [ERROR HANDLING](#error-handling)
 * [DEPENDENCIES](#dependencies)
 * [LAMBDA USAGE NOTES](#lambda-usage-notes)
@@ -456,6 +459,100 @@ Returns a hashref:
 Note that this operation is always signed against `us-east-1`
 regardless of the region the object was constructed with. See
 ["LAMBDA USAGE NOTES"](#lambda-usage-notes).
+
+## create\_bucket
+
+    $s3->create_bucket($bucket);
+    $s3->create_bucket($bucket, region => 'eu-west-1', acl => 'private');
+
+Creates a new S3 bucket. Options:
+
+- region
+
+    The region in which to create the bucket. Defaults to the region the
+    object was constructed with. **Note:** `us-east-1` is S3's implicit
+    default — the `CreateBucketConfiguration` body is intentionally
+    omitted for that region as including it causes a `InvalidLocationConstraint`
+    error. For all other regions the `LocationConstraint` element is
+    sent automatically.
+
+- acl
+
+    Canned ACL string, e.g. `private` (the S3 default), `public-read`.
+
+Returns true on success. Croaks on failure.
+
+## put\_bucket\_notification\_configuration
+
+    $s3->put_bucket_notification_configuration($bucket,
+      lambda_arn => $arn,
+      events     => 's3:ObjectCreated:*',
+    );
+
+    $s3->put_bucket_notification_configuration($bucket,
+      id         => 'MyTrigger',
+      lambda_arn => $arn,
+      events     => [qw(s3:ObjectCreated:* s3:ObjectRemoved:*)],
+      filters    => { prefix => 'uploads/', suffix => '.csv' },
+    );
+
+Sets the Lambda notification configuration for `$bucket`.
+To clear all notifications pass an empty configuration directly to
+`_create_notification_configuration` or re-call with no events.
+
+Options:
+
+- lambda\_arn (required)
+
+    The ARN of the Lambda function to invoke.
+
+- events (required)
+
+    A scalar event name or an arrayref of event names.
+    Common values: `s3:ObjectCreated:*`, `s3:ObjectRemoved:*`.
+
+- filters
+
+    A hashref of S3 key filter rules. Keys are `prefix` and/or `suffix`.
+
+- id
+
+    An identifier for the configuration entry. Defaults to `notification-1`.
+
+Returns true on success. Croaks on failure.
+
+## get\_bucket\_notification\_configuration
+
+    my $configs = $s3->get_bucket_notification_configuration($bucket);
+
+    for my $cfg ( @{$configs} ) {
+      printf "id=%s arn=%s\n", $cfg->{id}, $cfg->{lambda_arn};
+      print "  events: ", join(', ', @{ $cfg->{events} }), "\n";
+    }
+
+Retrieves the current notification configuration for `$bucket`.
+
+Returns an arrayref of configuration hashrefs, each containing:
+
+- id
+
+    The configuration entry identifier.
+
+- lambda\_arn
+
+    The Lambda function ARN.
+
+- events
+
+    Arrayref of event type strings.
+
+- filters
+
+    Arrayref of hashrefs, each with `name` (`prefix` or `suffix`)
+    and `value`.
+
+Returns an empty arrayref if no notification configuration is set.
+Croaks on failure.
 
 # ERROR HANDLING
 

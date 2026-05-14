@@ -10,11 +10,18 @@ use Carp qw(croak carp);
 use Data::Dumper;
 use Digest::MD5 qw(md5_base64 md5);
 use Digest::SHA qw(sha256_hex);
+use English qw(-no_match_vars);
 use HTTP::Tiny;
+use List::Util qw(pairs);
 use MIME::Base64 qw(encode_base64);
 use Scalar::Util qw(blessed openhandle reftype);
 use URI::Escape qw(uri_escape_utf8);
 use XML::Twig;
+
+use Readonly;
+
+Readonly our $TRUE  => 1;
+Readonly our $FALSE => 0;
 
 our $VERSION = '@PACKAGE_VERSION@';
 
@@ -417,6 +424,54 @@ sub delete_object {
 }
 
 ########################################################################
+# create_bucket( $bucket, %options )
+#
+# Creates a new S3 bucket.
+#
+# us-east-1 is the S3 default region — the CreateBucketConfiguration
+# body must NOT be sent for us-east-1 (S3 will error). All other regions
+# require it with LocationConstraint set to the target region.
+#
+# Options: acl, region
+#
+# Returns true on success. Croaks on failure.
+########################################################################
+sub create_bucket {
+########################################################################
+  my ( $self, $bucket, %options ) = @_;
+
+  croak 'bucket is required'
+    if !defined $bucket || !length $bucket;
+
+  my $region = $options{region} // $self->region;
+  my $url    = $self->_endpoint($bucket);
+  my %headers;
+
+  $headers{'x-amz-acl'} = $options{acl} if $options{acl};
+
+  my $content = q{};
+
+  # us-east-1 is the implicit default — sending LocationConstraint for it
+  # causes an error. All other regions require it.
+  if ( $region ne 'us-east-1' ) {
+    $content
+      = sprintf '<CreateBucketConfiguration '
+      . 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+      . '<LocationConstraint>%s</LocationConstraint>'
+      . '</CreateBucketConfiguration>',
+      $region;
+    $headers{'Content-Type'}   = 'application/xml';
+    $headers{'Content-Length'} = length $content;
+  }
+
+  my $response = $self->_request( 'PUT', $url, \%headers, $content, {}, $region );
+
+  $self->_croak_on_error( $response, 'create_bucket' );
+
+  return 1;
+}
+
+########################################################################
 # list_buckets()
 #
 # Lists all buckets owned by the authenticated user.
@@ -439,7 +494,7 @@ sub list_buckets {
 ########################################################################
   my ($self) = @_;
 
-  my $url = $self->_endpoint;  # https://s3.amazonaws.com
+  my $url = $self->_endpoint . q{/};  # ensure canonical URI is / not empty
 
   my $response = $self->_request( 'GET', $url, {}, q{}, {}, 'us-east-1' );
 
@@ -755,9 +810,10 @@ sub list_all_objects_v2 {
   my @all_objects;
   my $continuation_token;
 
-  while (1) {
-    $options{continuation_token} = $continuation_token
-      if defined $continuation_token;
+  while ($TRUE) {
+    if ( defined $continuation_token ) {
+      $options{continuation_token} = $continuation_token;
+    }
 
     my $result = $self->list_objects_v2( $bucket, %options );
 
@@ -771,6 +827,167 @@ sub list_all_objects_v2 {
   }
 
   return @all_objects;
+}
+
+########################################################################
+sub put_bucket_notification_configuration {
+########################################################################
+  my ( $self, $bucket, %options ) = @_;
+
+  my $xml = $self->_create_notification_configuration( $bucket, %options );
+
+  my $url = $self->_endpoint($bucket) . q{?notification};
+
+  my %headers = (
+    'Content-Type'   => 'application/xml',
+    'Content-Length' => length $xml,
+    'Content-MD5'    => encode_base64( md5($xml), q{} ),
+  );
+
+  my $response = $self->_request( 'PUT', $url, \%headers, $xml );
+
+  $self->_croak_on_error( $response, 'put_bucket_notification_configuration' );
+
+  return $TRUE;
+}
+
+########################################################################
+sub get_bucket_notification_configuration {
+########################################################################
+  my ( $self, $bucket ) = @_;
+
+  croak 'bucket is required'
+    if !defined $bucket || !length $bucket;
+
+  my $url = $self->_endpoint($bucket) . q{?notification};
+
+  my $response = $self->_request( 'GET', $url );
+
+  $self->_croak_on_error( $response, 'get_bucket_notification_configuration' );
+
+  return $self->_parse_notification_configuration( $response->{content} );
+}
+
+########################################################################
+sub _parse_notification_configuration {
+########################################################################
+  my ( $self, $xml ) = @_;
+
+  my @configs;
+
+  XML::Twig->new(
+    twig_handlers => {
+      'LambdaFunctionConfiguration' => sub {
+        my ( $t, $node ) = @_;
+
+        my @events = map { $_->text } $node->children('Event');
+
+        my @filter_rules;
+        if ( my $filter = $node->first_child('Filter') ) {
+          if ( my $s3key = $filter->first_child('S3Key') ) {
+            for my $rule ( $s3key->children('FilterRule') ) {
+              push @filter_rules,
+                {
+                name  => $rule->first_child_text('Name'),
+                value => $rule->first_child_text('Value'),
+                };
+            }
+          }
+        }
+
+        push @configs,
+          {
+          id         => $node->first_child_text('Id'),
+          lambda_arn => $node->first_child_text('LambdaFunctionArn'),
+          events     => \@events,
+          filters    => \@filter_rules,
+          };
+
+        $t->purge;
+      },
+    }
+  )->parse($xml);
+
+  return \@configs;
+}
+
+########################################################################
+sub _create_notification_configuration {
+########################################################################
+  my ( $self, $bucket, %options ) = @_;
+
+  croak 'ERROR: bucket is required'
+    if !defined $bucket || !length $bucket;
+
+  croak 'ERROR: lambda_arn is required'
+    if !$options{lambda_arn};
+
+  my $events = ref $options{events} ? $options{events} : [ $options{events} ];
+
+  croak "ERROR: no events defined\n"
+    if !@{$events};
+
+  my $templates = $self->_fetch_templates();
+
+  my $id = $options{id} // 'notification-1';
+
+  my @event_xml;
+
+  foreach ( @{$events} ) {
+    push @event_xml, $self->_resolve( $templates->[1], event => $_ );
+  }
+
+  my @filter_rules;
+
+  foreach my $p ( pairs %{ $options{filters} // {} } ) {
+    my ( $name, $value ) = @{$p};
+    push @filter_rules, $self->_resolve( $templates->[0], filter_name => $name, filter => $value );
+  }
+
+  my $xml = $templates->[2];
+
+  return $self->_resolve(
+    $xml,
+    id           => $id,
+    lambda_arn   => $options{lambda_arn},
+    events       => "@event_xml",
+    filter_rules => "@filter_rules"
+  );
+}
+
+my @TEMPLATES;
+
+########################################################################
+sub _fetch_templates {
+########################################################################
+  my ($self) = @_;
+  return \@TEMPLATES
+    if @TEMPLATES;
+
+  @TEMPLATES = eval {
+    local $RS = undef;
+    my $data = <DATA>;
+    $data =~ s/\A(.*?)^=pod.*\z/$1/xsm;
+    return split /^---$/xsm, $data;
+  };
+
+  return \@TEMPLATES;
+}
+
+########################################################################
+sub _resolve {
+########################################################################
+  my ( $self, $template, %data ) = @_;
+
+  my $output = $template;
+
+  foreach my $p ( pairs %data ) {
+    my ( $k, $v ) = @{$p};
+
+    $output =~ s/[@]\Q$k\E[@]/$v/xsm;
+  }
+
+  return $output;
 }
 
 ########################################################################
@@ -794,8 +1011,7 @@ sub _croak_on_error {
 
   return if _is_success($response);
 
-  my $status = $response->{status};
-  my $reason = $response->{reason};
+  my ( $status, $reason ) = @{$response}{qw(status reason)};
 
   # Attempt to extract S3 error message from XML body
   my $detail = q{};
@@ -803,7 +1019,10 @@ sub _croak_on_error {
   if ( $response->{content} && $response->{content} =~ /<\?xml/xsm ) {
     my ($code) = $response->{content} =~ m{<Code>([^<]+)</Code>}xsm;
     my ($msg)  = $response->{content} =~ m{<Message>([^<]+)</Message>}xsm;
-    $detail = " - $code: $msg" if $code || $msg;
+
+    if ( $code || $msg ) {
+      $detail = " - $code: $msg";
+    }
   }
 
   croak sprintf '%s failed: HTTP %s %s%s', $context, $status, $reason, $detail;
@@ -811,7 +1030,28 @@ sub _croak_on_error {
 
 1;
 
-__END__
+## no critic (RequirePodSections)
+
+__DATA__
+<FilterRule>
+  <Name>@filter_name@</Name>
+  <Value>@filter@</Value>
+</FilterRule>
+---
+<Event>@event@</Event>
+---
+<NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <LambdaFunctionConfiguration>
+    <Id>@id@</Id>
+    <LambdaFunctionArn>@lambda_arn@</LambdaFunctionArn>
+    @events@
+    <Filter>
+      <S3Key>
+        @filter_rules@
+      </S3Key>
+    </Filter>
+  </LambdaFunctionConfiguration>
+</NotificationConfiguration>
 
 =pod
 
@@ -1288,6 +1528,112 @@ Returns a hashref:
 Note that this operation is always signed against C<us-east-1>
 regardless of the region the object was constructed with. See
 L</LAMBDA USAGE NOTES>.
+
+=head2 create_bucket
+
+  $s3->create_bucket($bucket);
+  $s3->create_bucket($bucket, region => 'eu-west-1', acl => 'private');
+
+Creates a new S3 bucket. Options:
+
+=over 4
+
+=item region
+
+The region in which to create the bucket. Defaults to the region the
+object was constructed with. B<Note:> C<us-east-1> is S3's implicit
+default — the C<CreateBucketConfiguration> body is intentionally
+omitted for that region as including it causes a C<InvalidLocationConstraint>
+error. For all other regions the C<LocationConstraint> element is
+sent automatically.
+
+=item acl
+
+Canned ACL string, e.g. C<private> (the S3 default), C<public-read>.
+
+=back
+
+Returns true on success. Croaks on failure.
+
+=head2 put_bucket_notification_configuration
+
+  $s3->put_bucket_notification_configuration($bucket,
+    lambda_arn => $arn,
+    events     => 's3:ObjectCreated:*',
+  );
+
+  $s3->put_bucket_notification_configuration($bucket,
+    id         => 'MyTrigger',
+    lambda_arn => $arn,
+    events     => [qw(s3:ObjectCreated:* s3:ObjectRemoved:*)],
+    filters    => { prefix => 'uploads/', suffix => '.csv' },
+  );
+
+Sets the Lambda notification configuration for C<$bucket>.
+To clear all notifications pass an empty configuration directly to
+C<_create_notification_configuration> or re-call with no events.
+
+Options:
+
+=over 4
+
+=item lambda_arn (required)
+
+The ARN of the Lambda function to invoke.
+
+=item events (required)
+
+A scalar event name or an arrayref of event names.
+Common values: C<s3:ObjectCreated:*>, C<s3:ObjectRemoved:*>.
+
+=item filters
+
+A hashref of S3 key filter rules. Keys are C<prefix> and/or C<suffix>.
+
+=item id
+
+An identifier for the configuration entry. Defaults to C<notification-1>.
+
+=back
+
+Returns true on success. Croaks on failure.
+
+=head2 get_bucket_notification_configuration
+
+  my $configs = $s3->get_bucket_notification_configuration($bucket);
+
+  for my $cfg ( @{$configs} ) {
+    printf "id=%s arn=%s\n", $cfg->{id}, $cfg->{lambda_arn};
+    print "  events: ", join(', ', @{ $cfg->{events} }), "\n";
+  }
+
+Retrieves the current notification configuration for C<$bucket>.
+
+Returns an arrayref of configuration hashrefs, each containing:
+
+=over 4
+
+=item id
+
+The configuration entry identifier.
+
+=item lambda_arn
+
+The Lambda function ARN.
+
+=item events
+
+Arrayref of event type strings.
+
+=item filters
+
+Arrayref of hashrefs, each with C<name> (C<prefix> or C<suffix>)
+and C<value>.
+
+=back
+
+Returns an empty arrayref if no notification configuration is set.
+Croaks on failure.
 
 =head1 ERROR HANDLING
 

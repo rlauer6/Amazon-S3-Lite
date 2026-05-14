@@ -205,10 +205,10 @@ XML
 
   my $r = $s3->list_buckets;
 
-  is $captured->{method}, 'GET',                      'method is GET';
-  is $captured->{url},    'https://s3.amazonaws.com', 'hits root endpoint';
-  is $captured->{region}, 'us-east-1',                'always signs with us-east-1';
-  is $s3->region,         'eu-west-1',                'object region unchanged';
+  is $captured->{method}, 'GET',                       'method is GET';
+  is $captured->{url},    'https://s3.amazonaws.com/', 'hits root endpoint';
+  is $captured->{region}, 'us-east-1',                 'always signs with us-east-1';
+  is $s3->region,         'eu-west-1',                 'object region unchanged';
 
   is $r->{owner_id},            'owner123', 'owner_id';
   is $r->{owner_name},          'rob',      'owner_name';

@@ -10,7 +10,6 @@ dependencies:
   test-requires: test-requires
 path:
   pm-module: lib
-  exe-files: bin
   tests: t
 extra-files:
   - ChangeLog

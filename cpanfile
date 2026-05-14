@@ -1,4 +1,5 @@
 requires "IO::Socket::SSL", "0";
+requires "List::Util", "0";
 requires "Net::SSLeay", "0";
 requires "Amazon::Signature4::Lite", "1.0.0";
 requires "HTTP::Tiny", "0";
