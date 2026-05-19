@@ -260,7 +260,9 @@ sub _request {
 
   my $options = { headers => $signed };
 
-  $options->{content} = $content if length $content || $content_is_coderef;
+  if ( length $content || $content_is_coderef ) {
+    $options->{content} = $content;
+  }
 
   if ( $extra->{data_callback} ) {
     $options->{data_callback} = $extra->{data_callback};
@@ -836,7 +838,7 @@ sub put_bucket_notification_configuration {
 
   my $xml = $self->_create_notification_configuration( $bucket, %options );
 
-  my $url = $self->_endpoint($bucket) . q{?notification};
+  my $url = $self->_endpoint($bucket) . q{?notification=};
 
   my %headers = (
     'Content-Type'   => 'application/xml',
@@ -859,13 +861,23 @@ sub get_bucket_notification_configuration {
   croak 'bucket is required'
     if !defined $bucket || !length $bucket;
 
-  my $url = $self->_endpoint($bucket) . q{?notification};
+  my $url = $self->_endpoint($bucket) . q{?notification=};
 
   my $response = $self->_request( 'GET', $url );
 
   $self->_croak_on_error( $response, 'get_bucket_notification_configuration' );
 
-  return $self->_parse_notification_configuration( $response->{content} );
+  my $rsp = $self->_parse_notification_configuration( $response->{content} );
+
+  $self->logger->debug(
+    Dumper(
+      [ response        => $response,
+        parsed_response => $rsp
+      ]
+    )
+  );
+
+  return $rsp;
 }
 
 ########################################################################
@@ -877,7 +889,7 @@ sub _parse_notification_configuration {
 
   XML::Twig->new(
     twig_handlers => {
-      'LambdaFunctionConfiguration' => sub {
+      'CloudFunctionConfiguration' => sub {
         my ( $t, $node ) = @_;
 
         my @events = map { $_->text } $node->children('Event');
@@ -898,7 +910,7 @@ sub _parse_notification_configuration {
         push @configs,
           {
           id         => $node->first_child_text('Id'),
-          lambda_arn => $node->first_child_text('LambdaFunctionArn'),
+          lambda_arn => $node->first_child_text('CloudFunction'),
           events     => \@events,
           filters    => \@filter_rules,
           };

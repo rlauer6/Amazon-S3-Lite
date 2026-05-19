@@ -1,3 +1,19 @@
+Tue May 19 16:01:24 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.1.2]:
+	* release-notes/release-notes-1.1.2.md
+	* VERSION: bump
+	* lib/Amazon/S3/Lite.pm.in
+	(_request)
+	- remove use of postfix if
+	(put_bucket_notification_configuration)
+	- set query string variable with '=' for signing
+	(get_bucket_notification_configuration)
+	- likewise
+	- log parsed reponse at debug level
+	(_parse_notification_configuration)
+	- elements to capture are CloudFunctionConfiguration, CloudFunction, not Lambda*
+
 Thu May 14 10:00:33 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.1.1]:
