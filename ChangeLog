@@ -1,3 +1,10 @@
+Thu May 21 09:29:49 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.1.4]: pod only update
+	* README.md: generated
+	* VERSION: bump
+	* lib/Amazon/S3/Lite.pm.in: updated pod
+
 Thu May 21 08:43:43 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.1.3]:

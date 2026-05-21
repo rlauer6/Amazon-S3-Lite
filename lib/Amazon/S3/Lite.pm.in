@@ -1184,6 +1184,32 @@ operations
     print $bucket->{name}, "\n";
   }
 
+  # Create a bucket
+  $s3->create_bucket('my-bucket');
+  $s3->create_bucket('my-bucket', region => 'eu-west-1');
+
+  # Configure a Lambda notification trigger
+  $s3->put_bucket_notification_configuration('my-bucket',
+    type       => 'lambda',
+    lambda_arn => $function_arn,
+    events     => 's3:ObjectCreated:*',
+    filters    => { prefix => 'uploads/' },
+  );
+
+  # Configure an SQS notification trigger
+  $s3->put_bucket_notification_configuration('my-bucket',
+    type      => 'sqs',
+    queue_arn => $queue_arn,
+    events    => 's3:ObjectCreated:*',
+  );
+
+  # Retrieve notification configuration
+  my $configs = $s3->get_bucket_notification_configuration('my-bucket');
+  for my $cfg ( @{$configs} ) {
+    printf "id=%s lambda=%s queue=%s\n",
+      $cfg->{id}, $cfg->{lambda_arn} // '', $cfg->{queue_arn} // '';
+  }
+
 =head1 DESCRIPTION
 
 C<Amazon::S3::Lite> is a minimal Amazon S3 client covering the
@@ -1596,7 +1622,7 @@ Creates a new S3 bucket. Options:
 
 The region in which to create the bucket. Defaults to the region the
 object was constructed with. B<Note:> C<us-east-1> is S3's implicit
-default — the C<CreateBucketConfiguration> body is intentionally
+default - the C<CreateBucketConfiguration> body is intentionally
 omitted for that region as including it causes a C<InvalidLocationConstraint>
 error. For all other regions the C<LocationConstraint> element is
 sent automatically.
@@ -1611,29 +1637,39 @@ Returns true on success. Croaks on failure.
 
 =head2 put_bucket_notification_configuration
 
+  # Lambda trigger
   $s3->put_bucket_notification_configuration($bucket,
-    lambda_arn => $arn,
+    type       => 'lambda',
+    lambda_arn => $function_arn,
     events     => 's3:ObjectCreated:*',
   );
 
+  # SQS trigger
   $s3->put_bucket_notification_configuration($bucket,
-    id         => 'MyTrigger',
-    lambda_arn => $arn,
-    events     => [qw(s3:ObjectCreated:* s3:ObjectRemoved:*)],
-    filters    => { prefix => 'uploads/', suffix => '.csv' },
+    type      => 'sqs',
+    queue_arn => $queue_arn,
+    events    => [qw(s3:ObjectCreated:* s3:ObjectRemoved:*)],
+    filters   => { prefix => 'uploads/', suffix => '.csv' },
   );
 
-Sets the Lambda notification configuration for C<$bucket>.
-To clear all notifications pass an empty configuration directly to
-C<_create_notification_configuration> or re-call with no events.
+Sets the bucket notification configuration for C<$bucket>, routing
+S3 events to a Lambda function or SQS queue.
 
 Options:
 
 =over 4
 
-=item lambda_arn (required)
+=item type (required)
+
+The notification target type. Must be C<lambda> or C<sqs>.
+
+=item lambda_arn (required when type is C<lambda>)
 
 The ARN of the Lambda function to invoke.
+
+=item queue_arn (required when type is C<sqs>)
+
+The ARN of the SQS queue to deliver messages to.
 
 =item events (required)
 
@@ -1642,7 +1678,8 @@ Common values: C<s3:ObjectCreated:*>, C<s3:ObjectRemoved:*>.
 
 =item filters
 
-A hashref of S3 key filter rules. Keys are C<prefix> and/or C<suffix>.
+A hashref of S3 key filter rules. Supported keys are C<prefix>
+and C<suffix>.
 
 =item id
 
@@ -1657,11 +1694,19 @@ Returns true on success. Croaks on failure.
   my $configs = $s3->get_bucket_notification_configuration($bucket);
 
   for my $cfg ( @{$configs} ) {
-    printf "id=%s arn=%s\n", $cfg->{id}, $cfg->{lambda_arn};
+    if ( $cfg->{lambda_arn} ) {
+      printf "Lambda: id=%s arn=%s\n", $cfg->{id}, $cfg->{lambda_arn};
+    }
+    elsif ( $cfg->{queue_arn} ) {
+      printf "SQS:    id=%s arn=%s\n", $cfg->{id}, $cfg->{queue_arn};
+    }
     print "  events: ", join(', ', @{ $cfg->{events} }), "\n";
   }
 
 Retrieves the current notification configuration for C<$bucket>.
+Handles both Lambda (C<CloudFunctionConfiguration>) and SQS
+(C<QueueConfiguration>) entries, which are the XML element names
+the S3 API returns regardless of how the configuration was created.
 
 Returns an arrayref of configuration hashrefs, each containing:
 
@@ -1673,7 +1718,13 @@ The configuration entry identifier.
 
 =item lambda_arn
 
-The Lambda function ARN.
+The Lambda function ARN. Present for Lambda notification entries;
+C<undef> for SQS entries.
+
+=item queue_arn
+
+The SQS queue ARN. Present for SQS notification entries;
+C<undef> for Lambda entries.
 
 =item events
 
@@ -1725,7 +1776,7 @@ available.
 
 =item * L<XML::Twig> (for parsing list and copy responses)
 
-=item * L<Digest::MD5> (core)
+=item * L<Digest::MD5> (core, for Content-MD5 headers)
 
 =item * L<MIME::Base64> (core)
 

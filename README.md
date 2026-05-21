@@ -98,6 +98,32 @@ operations
       print $bucket->{name}, "\n";
     }
 
+    # Create a bucket
+    $s3->create_bucket('my-bucket');
+    $s3->create_bucket('my-bucket', region => 'eu-west-1');
+
+    # Configure a Lambda notification trigger
+    $s3->put_bucket_notification_configuration('my-bucket',
+      type       => 'lambda',
+      lambda_arn => $function_arn,
+      events     => 's3:ObjectCreated:*',
+      filters    => { prefix => 'uploads/' },
+    );
+
+    # Configure an SQS notification trigger
+    $s3->put_bucket_notification_configuration('my-bucket',
+      type      => 'sqs',
+      queue_arn => $queue_arn,
+      events    => 's3:ObjectCreated:*',
+    );
+
+    # Retrieve notification configuration
+    my $configs = $s3->get_bucket_notification_configuration('my-bucket');
+    for my $cfg ( @{$configs} ) {
+      printf "id=%s lambda=%s queue=%s\n",
+        $cfg->{id}, $cfg->{lambda_arn} // '', $cfg->{queue_arn} // '';
+    }
+
 # DESCRIPTION
 
 `Amazon::S3::Lite` is a minimal Amazon S3 client covering the
@@ -471,7 +497,7 @@ Creates a new S3 bucket. Options:
 
     The region in which to create the bucket. Defaults to the region the
     object was constructed with. **Note:** `us-east-1` is S3's implicit
-    default — the `CreateBucketConfiguration` body is intentionally
+    default - the `CreateBucketConfiguration` body is intentionally
     omitted for that region as including it causes a `InvalidLocationConstraint`
     error. For all other regions the `LocationConstraint` element is
     sent automatically.
@@ -484,27 +510,37 @@ Returns true on success. Croaks on failure.
 
 ## put\_bucket\_notification\_configuration
 
+    # Lambda trigger
     $s3->put_bucket_notification_configuration($bucket,
-      lambda_arn => $arn,
+      type       => 'lambda',
+      lambda_arn => $function_arn,
       events     => 's3:ObjectCreated:*',
     );
 
+    # SQS trigger
     $s3->put_bucket_notification_configuration($bucket,
-      id         => 'MyTrigger',
-      lambda_arn => $arn,
-      events     => [qw(s3:ObjectCreated:* s3:ObjectRemoved:*)],
-      filters    => { prefix => 'uploads/', suffix => '.csv' },
+      type      => 'sqs',
+      queue_arn => $queue_arn,
+      events    => [qw(s3:ObjectCreated:* s3:ObjectRemoved:*)],
+      filters   => { prefix => 'uploads/', suffix => '.csv' },
     );
 
-Sets the Lambda notification configuration for `$bucket`.
-To clear all notifications pass an empty configuration directly to
-`_create_notification_configuration` or re-call with no events.
+Sets the bucket notification configuration for `$bucket`, routing
+S3 events to a Lambda function or SQS queue.
 
 Options:
 
-- lambda\_arn (required)
+- type (required)
+
+    The notification target type. Must be `lambda` or `sqs`.
+
+- lambda\_arn (required when type is `lambda`)
 
     The ARN of the Lambda function to invoke.
+
+- queue\_arn (required when type is `sqs`)
+
+    The ARN of the SQS queue to deliver messages to.
 
 - events (required)
 
@@ -513,7 +549,8 @@ Options:
 
 - filters
 
-    A hashref of S3 key filter rules. Keys are `prefix` and/or `suffix`.
+    A hashref of S3 key filter rules. Supported keys are `prefix`
+    and `suffix`.
 
 - id
 
@@ -526,11 +563,19 @@ Returns true on success. Croaks on failure.
     my $configs = $s3->get_bucket_notification_configuration($bucket);
 
     for my $cfg ( @{$configs} ) {
-      printf "id=%s arn=%s\n", $cfg->{id}, $cfg->{lambda_arn};
+      if ( $cfg->{lambda_arn} ) {
+        printf "Lambda: id=%s arn=%s\n", $cfg->{id}, $cfg->{lambda_arn};
+      }
+      elsif ( $cfg->{queue_arn} ) {
+        printf "SQS:    id=%s arn=%s\n", $cfg->{id}, $cfg->{queue_arn};
+      }
       print "  events: ", join(', ', @{ $cfg->{events} }), "\n";
     }
 
 Retrieves the current notification configuration for `$bucket`.
+Handles both Lambda (`CloudFunctionConfiguration`) and SQS
+(`QueueConfiguration`) entries, which are the XML element names
+the S3 API returns regardless of how the configuration was created.
 
 Returns an arrayref of configuration hashrefs, each containing:
 
@@ -540,7 +585,13 @@ Returns an arrayref of configuration hashrefs, each containing:
 
 - lambda\_arn
 
-    The Lambda function ARN.
+    The Lambda function ARN. Present for Lambda notification entries;
+    `undef` for SQS entries.
+
+- queue\_arn
+
+    The SQS queue ARN. Present for SQS notification entries;
+    `undef` for Lambda entries.
 
 - events
 
@@ -575,7 +626,7 @@ available.
 - [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny) (core since Perl 5.14)
 - [Amazon::Signature4::Lite](https://metacpan.org/pod/Amazon%3A%3ASignature4%3A%3ALite)
 - [XML::Twig](https://metacpan.org/pod/XML%3A%3ATwig) (for parsing list and copy responses)
-- [Digest::MD5](https://metacpan.org/pod/Digest%3A%3AMD5) (core)
+- [Digest::MD5](https://metacpan.org/pod/Digest%3A%3AMD5) (core, for Content-MD5 headers)
 - [MIME::Base64](https://metacpan.org/pod/MIME%3A%3ABase64) (core)
 - [URI::Escape](https://metacpan.org/pod/URI%3A%3AEscape)
 - [Carp](https://metacpan.org/pod/Carp) (core)
