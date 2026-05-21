@@ -1,3 +1,21 @@
+Thu May 21 08:43:43 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.1.3]:
+	* VERSION: bump
+	* release-notes/release-notes-1.1.2.md
+	* VERSION: bump
+	* lib/Amazon/S3/Lite.pm.in
+	- remove unused modules
+	(_parse_notification_configuration)
+	- use generic handler for both QueueConfiguration and LambdaFunctionConfiguration
+	(_create_notification_configuration)
+	- fetch templates from hash, not array
+	- add queue_arn to vars to resolve
+	(_fetch_templates)
+	- populate a hash of templates, not array
+	(_resolve): use g to resolve all instances of var
+	(__DATA__): setup template data structure to support hash
+
 Tue May 19 16:01:24 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.1.2]:

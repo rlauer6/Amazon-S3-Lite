@@ -6,15 +6,14 @@ use warnings;
 use Amazon::Signature4::Lite;
 use Amazon::S3::Lite::Credentials;
 use Amazon::S3::Lite::Logger;
-use Carp qw(croak carp);
+use Carp qw(croak);
 use Data::Dumper;
 use Digest::MD5 qw(md5_base64 md5);
-use Digest::SHA qw(sha256_hex);
 use English qw(-no_match_vars);
 use HTTP::Tiny;
 use List::Util qw(pairs);
 use MIME::Base64 qw(encode_base64);
-use Scalar::Util qw(blessed openhandle reftype);
+use Scalar::Util qw(blessed openhandle);
 use URI::Escape qw(uri_escape_utf8);
 use XML::Twig;
 
@@ -887,36 +886,41 @@ sub _parse_notification_configuration {
 
   my @configs;
 
+  my $handler = sub {
+    my ( $t, $node ) = @_;
+
+    my @events = map { $_->text } $node->children('Event');
+
+    my @filter_rules;
+
+    if ( my $filter = $node->first_child('Filter') ) {
+      if ( my $s3key = $filter->first_child('S3Key') ) {
+        for my $rule ( $s3key->children('FilterRule') ) {
+          push @filter_rules,
+            {
+            name  => $rule->first_child_text('Name'),
+            value => $rule->first_child_text('Value'),
+            };
+        }
+      }
+    }
+
+    push @configs,
+      {
+      id         => $node->first_child_text('Id'),
+      lambda_arn => $node->first_child_text('CloudFunction'),
+      queue_arn  => $node->first_child_text('Queue'),
+      events     => \@events,
+      filters    => \@filter_rules,
+      };
+
+    $t->purge;
+  };
+
   XML::Twig->new(
     twig_handlers => {
-      'CloudFunctionConfiguration' => sub {
-        my ( $t, $node ) = @_;
-
-        my @events = map { $_->text } $node->children('Event');
-
-        my @filter_rules;
-        if ( my $filter = $node->first_child('Filter') ) {
-          if ( my $s3key = $filter->first_child('S3Key') ) {
-            for my $rule ( $s3key->children('FilterRule') ) {
-              push @filter_rules,
-                {
-                name  => $rule->first_child_text('Name'),
-                value => $rule->first_child_text('Value'),
-                };
-            }
-          }
-        }
-
-        push @configs,
-          {
-          id         => $node->first_child_text('Id'),
-          lambda_arn => $node->first_child_text('CloudFunction'),
-          events     => \@events,
-          filters    => \@filter_rules,
-          };
-
-        $t->purge;
-      },
+      CloudFunctionConfiguration => $handler,
+      QueueConfiguration         => $handler
     }
   )->parse($xml);
 
@@ -931,13 +935,19 @@ sub _create_notification_configuration {
   croak 'ERROR: bucket is required'
     if !defined $bucket || !length $bucket;
 
+  croak "ERROR: type is a required argument\n"
+    if !$options{type};
+
   croak 'ERROR: lambda_arn is required'
-    if !$options{lambda_arn};
+    if $options{type} eq 'lambda' && !$options{lambda_arn};
+
+  croak 'ERROR: queue_arn is required'
+    if $options{type} eq 'sqs' && !$options{queue_arn};
 
   my $events = ref $options{events} ? $options{events} : [ $options{events} ];
 
   croak "ERROR: no events defined\n"
-    if !@{$events};
+    if !$options{events} || !@{$events};
 
   my $templates = $self->_fetch_templates();
 
@@ -946,44 +956,62 @@ sub _create_notification_configuration {
   my @event_xml;
 
   foreach ( @{$events} ) {
-    push @event_xml, $self->_resolve( $templates->[1], event => $_ );
+    push @event_xml, $self->_resolve( $templates->{event}, event => $_ );
   }
 
   my @filter_rules;
 
   foreach my $p ( pairs %{ $options{filters} // {} } ) {
     my ( $name, $value ) = @{$p};
-    push @filter_rules, $self->_resolve( $templates->[0], filter_name => $name, filter => $value );
+    push @filter_rules, $self->_resolve( $templates->{'filter-rule'}, filter_name => $name, filter => $value );
   }
 
-  my $xml = $templates->[2];
+  my $xml = $templates->{ $options{type} . '-event' };
 
   return $self->_resolve(
     $xml,
     id           => $id,
     lambda_arn   => $options{lambda_arn},
+    queue_arn    => $options{queue_arn},
     events       => "@event_xml",
     filter_rules => "@filter_rules"
   );
 }
 
-my @TEMPLATES;
+my %TEMPLATES;
 
 ########################################################################
 sub _fetch_templates {
 ########################################################################
   my ($self) = @_;
-  return \@TEMPLATES
-    if @TEMPLATES;
 
-  @TEMPLATES = eval {
-    local $RS = undef;
-    my $data = <DATA>;
-    $data =~ s/\A(.*?)^=pod.*\z/$1/xsm;
-    return split /^---$/xsm, $data;
-  };
+  return \%TEMPLATES
+    if %TEMPLATES;
 
-  return \@TEMPLATES;
+  local $RS = undef;
+
+  my $data = <DATA>;
+  $data =~ s/\A(.*?)^=pod.*\z/$1/xsm;
+
+  my $t             = q{};
+  my $template_name = q{};
+
+  foreach my $line ( split /\n/xsm, $data ) {
+    if ( $line =~ /^:(.*)$/xsm ) {
+      if ( $template_name && $t ) {
+        $TEMPLATES{$template_name} = $t;
+      }
+      $t             = q{};
+      $template_name = $1;
+      next;
+    }
+
+    $t .= "$line\n";
+  }
+
+  $TEMPLATES{$template_name} = $t;
+
+  return \%TEMPLATES;
 }
 
 ########################################################################
@@ -996,7 +1024,7 @@ sub _resolve {
   foreach my $p ( pairs %data ) {
     my ( $k, $v ) = @{$p};
 
-    $output =~ s/[@]\Q$k\E[@]/$v/xsm;
+    $output =~ s/[@]\Q$k\E[@]/$v/xsmg;
   }
 
   return $output;
@@ -1045,13 +1073,14 @@ sub _croak_on_error {
 ## no critic (RequirePodSections)
 
 __DATA__
+:filter-rule
 <FilterRule>
   <Name>@filter_name@</Name>
   <Value>@filter@</Value>
 </FilterRule>
----
+:event
 <Event>@event@</Event>
----
+:lambda-event
 <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
   <LambdaFunctionConfiguration>
     <Id>@id@</Id>
@@ -1063,6 +1092,19 @@ __DATA__
       </S3Key>
     </Filter>
   </LambdaFunctionConfiguration>
+</NotificationConfiguration>
+:sqs-event
+<NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <QueueConfiguration>
+    <Id>@id@</Id>
+    <Queue>@queue_arn@</Queue>
+    @events@
+    <Filter>
+      <S3Key>
+        @filter_rules@
+      </S3Key>
+    </Filter>
+  </QueueConfiguration>
 </NotificationConfiguration>
 
 =pod
