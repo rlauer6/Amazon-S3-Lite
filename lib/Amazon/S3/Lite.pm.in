@@ -997,7 +997,7 @@ sub _create_notification_configuration {
 
   my $xml = $templates->{ $options{type} . '-event' };
 
-  return $self->_resolve(
+  my $resolved_xml = $self->_resolve(
     $xml,
     id           => $id,
     lambda_arn   => $options{lambda_arn},
@@ -1005,6 +1005,8 @@ sub _create_notification_configuration {
     events       => "@event_xml",
     filter_rules => "@filter_rules"
   );
+
+  return $resolved_xml;
 }
 
 my %TEMPLATES;
@@ -1111,16 +1113,16 @@ __DATA__
 <Event>@event@</Event>
 :lambda-event
 <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-  <LambdaFunctionConfiguration>
+  <CloudFunctionConfiguration>
     <Id>@id@</Id>
-    <LambdaFunctionArn>@lambda_arn@</LambdaFunctionArn>
+    <CloudFunction>@lambda_arn@</CloudFunction>
     @events@
     <Filter>
       <S3Key>
         @filter_rules@
       </S3Key>
     </Filter>
-  </LambdaFunctionConfiguration>
+  </CloudFunctionConfiguration>
 </NotificationConfiguration>
 :sqs-event
 <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
