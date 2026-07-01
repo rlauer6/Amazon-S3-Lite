@@ -77,9 +77,8 @@ sub _init_logger {
     if ( !Log::Log4perl->initialized ) {
       Log::Log4perl->easy_init( { level => uc $log_level } );
     }
-    else {
-      $self->{logger} = Log::Log4perl->get_logger(__PACKAGE__);
-    }
+
+    $self->{logger} = Log::Log4perl->get_logger(__PACKAGE__);
     return;
   }
 

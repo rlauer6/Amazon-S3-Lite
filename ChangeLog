@@ -1,3 +1,13 @@
+Wed Jul  1 12:35:15 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.2.3]:
+	* release-notes/release-notes-1.2.3.md: new
+	* release-notes.md: updated
+	* README.md: generated
+	* VERSION: bump
+	* lib/Amazon/S3/Lite.pm.in
+	(_init_logger): set $self->{logger} when using easy_init
+
 Thu Jun 18 16:13:55 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.2.2]:

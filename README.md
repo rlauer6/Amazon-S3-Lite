@@ -717,10 +717,10 @@ it under the same terms as Perl itself.
 
 Hey! **The above document had some coding errors, which are explained below:**
 
-- Around line 1473:
+- Around line 1472:
 
     '=item' outside of any '=over'
 
-- Around line 1480:
+- Around line 1479:
 
     You forgot a '=back' before '=head2'
