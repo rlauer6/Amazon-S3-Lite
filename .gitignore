@@ -67,3 +67,6 @@ resources
 *-review-2*.annotate
 **/*.crit
 **/*.tdy
+**/*.checked
+**/*.raw
+buildspec.yml.current
